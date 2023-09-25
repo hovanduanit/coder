@@ -5,4 +5,5 @@ public class Animal {
     private String animal2;
     private String animal3;
     private String animal4;
+    private String animal5;
 }
