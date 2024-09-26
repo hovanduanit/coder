@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Form</title>
+    <script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+<form id="payment-form">
+    <div id="card-element"></div>
+    <button type="submit">Pay</button>
+</form>
+<div id="payment-result"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const stripe = Stripe('pk_test_your_public_key'); // Thay bằng public key của bạn
+        const elements = stripe.elements();
+        const cardElement = elements.create('card');
+        cardElement.mount('#card-element');
+
+        const form = document.getElementById('payment-form');
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            // Gửi yêu cầu tạo Payment Intent
+            const response = await fetch('/create-payment-intent', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    amount: 1000, // Số tiền thanh toán (ví dụ: 10 USD)
+                    email: 'customer@example.com' // Email của khách hàng
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("Lỗi khi tạo Payment Intent:", errorData.error);
+                alert(errorData.error || "Có lỗi xảy ra!");
+                return;
+            }
+
+            const data = await response.json();
+
+            if (data.error) {
+                console.error("Lỗi từ server:", data.error);
+                alert(data.error);
+                return;
+            }
+
+            const clientSecret = data.clientSecret;
+
+            // Xác nhận thanh toán
+            const result = await stripe.confirmCardPayment(clientSecret, {
+                payment_method: {
+                    card: cardElement,
+                },
+            });
+
+            if (result.error) {
+                console.error('Error:', result.error);
+                alert(result.error.message);
+            } else {
+                if (result.paymentIntent.status === 'succeeded') {
+                    document.getElementById('payment-result').innerText = 'Payment successful!';
+                }
+            }
+        });
+    });
+</script>
+</body>
+</html>
