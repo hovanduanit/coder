@@ -5,7 +5,7 @@
     <title>Thanh Toán</title>
     <script src="https://js.stripe.com/v3/"></script>
     <style>
-        /* CSS đơn giản để tạo kiểu cho form */
+        /* Một số CSS đơn giản để tạo kiểu cho form */
         .container {
             max-width: 500px;
             margin: 50px auto;
@@ -19,18 +19,22 @@
             border-radius: 4px;
             margin-bottom: 20px;
         }
-        #submit, #retry-payment {
+        #submit {
             background-color: #6772E5;
             color: white;
             padding: 10px 20px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            margin-top: 10px;
-            width: 100%;
         }
         #retry-payment {
             background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
         }
         #payment-message {
             margin-top: 20px;
@@ -62,7 +66,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const stripe = Stripe(''); // Thay bằng Public Key của bạn
+        const stripe = Stripe('pk_test_your_public_key'); // Thay bằng Public Key của bạn
         const elements = stripe.elements();
         const cardElement = elements.create('card');
         cardElement.mount('#card-element');
@@ -151,14 +155,19 @@
                 }
 
                 const clientSecret = data.clientSecret;
+                const customerId = data.customerId;
 
                 if (!clientSecret) {
                     throw new Error('Không nhận được client secret từ server');
                 }
 
+                // Lấy PaymentMethod ID từ cơ sở dữ liệu hoặc session
+                // Giả sử bạn có một cách nào đó để lấy paymentMethodId đã lưu
+                const savedPaymentMethodId = 'pm_saved_payment_method_id'; // Thay bằng PaymentMethod ID thực tế
+
                 // Xác nhận thanh toán với PaymentMethod đã lưu
                 const result = await stripe.confirmCardPayment(clientSecret, {
-                    payment_method: 'pm_saved_payment_method_id', // Thay bằng PaymentMethod ID thực tế đã lưu
+                    payment_method: savedPaymentMethodId,
                 });
 
                 if (result.error) {
