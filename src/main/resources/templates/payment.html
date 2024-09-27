@@ -62,7 +62,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        const stripe = Stripe(''); // Thay bằng Public Key của bạn
+        const stripe = Stripe('pk_test_51Q3Ggq2MBG1ftSLQa7LXnT1k8R7evJChz6qGfjxCZ8wKXqfYOvXI2qzoHnSjeGMT6dh4xhtnYy5sstvNBJLyKUMY00iROG7Hc9'); // Thay bằng Public Key của bạn
         const elements = stripe.elements();
         const cardElement = elements.create('card');
         cardElement.mount('#card-element');

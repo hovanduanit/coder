@@ -34,12 +34,12 @@
             document.getElementById('card-errors').innerText = error.message;
         } else {
             // Gửi paymentMethod.id tới server để lưu trữ
-            const response = await fetch('/add-payment-method', {
+            const response = await fetch('/payment/add-payment-method', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ paymentMethodId: paymentMethod.id })
+                body: JSON.stringify({ paymentMethodId: paymentMethod.id, email: "king@gmail.com" })
             });
 
             const result = await response.json();

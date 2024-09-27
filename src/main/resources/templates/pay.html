@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pay with Card</title>
+    <script src="https://js.stripe.com/v3/"></script>
+
+</head>
+<body>
+<h1>Pay with Card</h1>
+<form id="payment-form">
+    <select id="payment-method-select"></select>
+    <input type="number" id="amount" placeholder="Enter amount (in cents)" required />
+    <button type="submit" id="payment">Pay</button>
+    <div id="payment-errors" role="alert"></div>
+</form>
+
+<script>
+    const stripe = Stripe('pk_test_51Q3Ggq2MBG1ftSLQa7LXnT1k8R7evJChz6qGfjxCZ8wKXqfYOvXI2qzoHnSjeGMT6dh4xhtnYy5sstvNBJLyKUMY00iROG7Hc9'); // Thay bằng public key của bạn
+    const elements = stripe.elements();
+    const cardElement = elements.create('card');
+    async function loadPaymentMethods() {
+        const response = await fetch('/payment/get-payment-methods'); // Endpoint để lấy danh sách thẻ
+        const paymentMethods = await response.json();
+
+        const select = document.getElementById('payment-method-select');
+        paymentMethods.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.id; // ID của payment method
+            option.textContent = method.card.brand + ' **** **** **** ' + method.card.last4; // Hiển thị thông tin thẻ
+            select.appendChild(option);
+        });
+    }
+
+    // document.getElementById('payment-form').addEventListener('submit', async (event) => {
+    //     event.preventDefault();
+    //     const paymentMethodId = document.getElementById('payment-method-select').value;
+    //     const amount = document.getElementById('amount').value;
+    //
+    //     const response = await fetch('/payment/create-payment-intent-2', {
+    //         method: 'POST',
+    //         headers: {
+    //             'Content-Type': 'application/json'
+    //         },
+    //         body: JSON.stringify({ paymentMethodId, amount })
+    //     });
+    //
+    //     const data = await response.json();
+    //
+    //     if (data.error) {
+    //         throw new Error(data.error);
+    //     }
+    //
+    //     const clientSecret = data.clientSecret;
+    //     const customerId = data.customerId;
+    //
+    //     if (!clientSecret) {
+    //         throw new Error('Không nhận được client secret từ server');
+    //     }
+    //
+    //     // Xác nhận thanh toán và lưu Payment Method
+    //     const result = await stripe.confirmCardPayment(clientSecret, {
+    //         payment_method: {
+    //             card: cardElement,
+    //             billing_details: {
+    //                 email: 'king@gmail.com',
+    //             },
+    //         },
+    //         setup_future_usage: 'off_session', // Để lưu Payment Method cho lần sau
+    //     });
+    //     if (data.error) {
+    //         document.getElementById('payment-errors').innerText = data.error;
+    //     } else {
+    //         alert('Payment successful!');
+    //         // Có thể điều hướng tới trang khác hoặc làm gì đó khác
+    //     }
+    // });
+
+
+
+
+
+
+
+
+    const retryButton = document.getElementById('payment');
+    // Sự kiện cho button thanh toán lại
+    retryButton.addEventListener('click', async () => {
+        const amount = parseInt(document.getElementById('amount').value) * 100; // Stripe tính bằng cents
+
+        try {
+            const response = await fetch('/payment/create-payment-intent-for-existing-customer', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ amount: amount, email: 'king@gmail.com' })
+            });
+
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            const clientSecret = data.clientSecret;
+
+            if (!clientSecret) {
+                throw new Error('Không nhận được client secret từ server');
+            }
+
+            // Xác nhận thanh toán với PaymentMethod đã lưu
+            const result = await stripe.confirmCardPayment(clientSecret, {
+                payment_method: 'pm_saved_payment_method_id', // Thay bằng PaymentMethod ID thực tế đã lưu
+            });
+
+
+        } catch (error) {
+            console.error('Error:', error);
+
+        }
+    });
+
+    loadPaymentMethods(); // Tải danh sách thẻ khi trang được tải
+</script>
+</body>
+</html>

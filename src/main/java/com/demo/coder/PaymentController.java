@@ -4,10 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stripe.Stripe;
 import com.stripe.exception.SignatureVerificationException;
 import com.stripe.exception.StripeException;
-import com.stripe.model.Customer;
-import com.stripe.model.Event;
-import com.stripe.model.PaymentIntent;
-import com.stripe.model.PaymentMethod;
+import com.stripe.model.*;
 import com.stripe.net.Webhook;
 import com.stripe.param.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,10 +15,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Controller
 @RequestMapping("/payment")
@@ -32,6 +26,8 @@ public class PaymentController {
 
     @Value("${stripe.webhook.secret}")
     private String webhookSecret;
+
+    private String id;
 
     private final CustomerRepository customerRepository;
 
@@ -313,5 +309,102 @@ public class PaymentController {
 
             return customer;
         }
+    }
+
+    @PostMapping("/add-payment-method")
+    public Map<String, Object> addPaymentMethod(@RequestBody Map<String, String> request) {
+        Stripe.apiKey = stripeApiKey;
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String paymentMethodId = request.get("paymentMethodId");
+            String email = request.get("email");
+
+            if (paymentMethodId == null || paymentMethodId.isEmpty()) {
+                response.put("error", "Invalid payment method ID.");
+                return response;
+            }
+
+            Customer customer = createOrRetrieveCustomer(email);
+            String customerId = customer.getId();
+
+            // Thêm payment method vào customer
+            PaymentMethodAttachParams attachParams = PaymentMethodAttachParams.builder()
+                    .setCustomer(customerId)
+                    .build();
+
+            PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
+            paymentMethod.attach(attachParams);
+
+            // Cập nhật default payment method cho customer
+            CustomerUpdateParams customerUpdateParams = CustomerUpdateParams.builder()
+                    .setInvoiceSettings(
+                            CustomerUpdateParams.InvoiceSettings.builder()
+                                    .setDefaultPaymentMethod(paymentMethodId)
+                                    .build()
+                    )
+                    .build();
+
+            customer.update(customerUpdateParams);
+id = customerId;
+            response.put("success", true);
+            response.put("customerId", customerId); // Trả về customerId nếu cần
+        } catch (StripeException e) {
+            response.put("error", e.getMessage());
+        } catch (Exception e) {
+            response.put("error", "An unexpected error occurred: " + e.getMessage());
+        }
+        return response;
+    }
+
+    @GetMapping("/get-payment-methods")
+    public ResponseEntity<List<PaymentMethod>> getPaymentMethods() {
+        Stripe.apiKey = stripeApiKey;
+        String customerId = id; // Thay bằng customerId thực tế
+        try {
+            PaymentMethodListParams params = PaymentMethodListParams.builder()
+                    .setCustomer(customerId)
+                    .build();
+
+            PaymentMethodCollection paymentMethods = PaymentMethod.list(params);
+            return ResponseEntity.ok(paymentMethods.getData());
+        } catch (StripeException e) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+    }
+
+    @PostMapping("/create-payment-intent-2")
+    public ResponseEntity<Map<String, Object>> createPaymentIntent(@RequestBody Map<String, Object> request) {
+        Stripe.apiKey = stripeApiKey;
+        String paymentMethodId = (String) request.get("paymentMethodId");
+        Long amount = Long.valueOf((String) request.get("amount")); // Số tiền trong cent
+
+        try {
+
+            // Tạo Payment Intent
+            PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
+                    .setAmount(amount)
+                    .setCurrency("usd")
+                    .setCustomer(id)
+                    .addPaymentMethodType("card")
+                    .setSetupFutureUsage(PaymentIntentCreateParams.SetupFutureUsage.OFF_SESSION)
+                    .build();
+
+            PaymentIntent paymentIntent = PaymentIntent.create(params);
+            Map<String, Object> response = new HashMap<>();
+            response.put("clientSecret", paymentIntent.getClientSecret());
+            response.put("customerId", id);
+            return ResponseEntity.ok(response);
+        } catch (StripeException e) {
+            return ResponseEntity.ok(Collections.singletonMap("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/add")
+    public String addCard() {
+        return "addCard"; // Chỉ định trang thanh toán
+    }
+    @GetMapping("/pay")
+    public String pay() {
+        return "pay"; // Chỉ định trang thanh toán
     }
 }
