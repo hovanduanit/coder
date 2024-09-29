@@ -72,7 +72,7 @@ public class PaymentController {
 
         try {
             // Tạo hoặc lấy Customer
-            com.stripe.model.Customer customer = createOrRetrieveCustomer(paymentRequest.getEmail());
+            com.stripe.model.Customer customer = createOrRetrieveCustomer(paymentRequest.getEmail(), "1");
 
             // Tạo Payment Intent
             PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
@@ -94,48 +94,7 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
-    // Endpoint để tạo PaymentIntent cho thanh toán lại
-    @PostMapping("/create-payment-intent-for-existing-customer")
-    public ResponseEntity<Map<String, Object>> createPaymentIntentForExistingCustomer(@RequestBody PaymentRequest paymentRequest) {
-        Stripe.apiKey = stripeApiKey;
-        Map<String, Object> response = new HashMap<>();
 
-        try {
-            // Lấy Customer từ DB
-            CustomerEntity existingCustomer = customerRepository.findByEmail(paymentRequest.getEmail());
-            if (existingCustomer == null) {
-                throw new Exception("Customer not found");
-            }
-
-            // Lấy PaymentMethod ID đã lưu
-            String savedPaymentMethodId = existingCustomer.getPaymentMethodId();
-            if (savedPaymentMethodId == null || savedPaymentMethodId.isEmpty()) {
-                throw new Exception("No saved PaymentMethod for this customer");
-            }
-
-            // Tạo Payment Intent với customerId và PaymentMethod đã lưu
-            PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
-                    .setAmount((long) paymentRequest.getAmount())
-                    .setCurrency("usd")
-                    .setCustomer(existingCustomer.getCustomerId())
-                    .addPaymentMethodType("card")
-                    .setPaymentMethod(savedPaymentMethodId)
-                    .setConfirmationMethod(PaymentIntentCreateParams.ConfirmationMethod.AUTOMATIC)
-                    .setConfirm(true)
-                    .build();
-
-            PaymentIntent paymentIntent = PaymentIntent.create(params);
-
-            response.put("clientSecret", paymentIntent.getClientSecret());
-            response.put("customerId", existingCustomer.getCustomerId());
-        } catch (StripeException e) {
-            response.put("error", e.getMessage());
-        } catch (Exception e) {
-            response.put("error", e.getMessage());
-        }
-
-        return ResponseEntity.ok(response);
-    }
 
     // Endpoint để xử lý webhook từ Stripe
     @PostMapping("/webhook")
@@ -167,12 +126,23 @@ public class PaymentController {
                 PaymentMethod paymentMethod = (PaymentMethod) event.getData().getObject();
                 handlePaymentMethodAttached(paymentMethod);
                 break;
+            case "payment_method.detached":
+                handlePaymentMethodDetached((com.stripe.model.PaymentMethod) event.getData().getObject());
+                break;
             default:
                 // Các sự kiện khác có thể được xử lý ở đây
                 break;
         }
 
         return ResponseEntity.ok("Webhook received");
+    }
+
+    public void handlePaymentMethodDetached(PaymentMethod paymentMethod) {
+        String paymentMethodId = paymentMethod.getId();
+
+        // Xóa thông tin thẻ khỏi cơ sở dữ liệu
+
+        System.out.println("PaymentMethod detached: " + paymentMethodId);
     }
 
     // Xử lý sự kiện khi PaymentIntent thành công
@@ -289,88 +259,11 @@ public class PaymentController {
         return ResponseEntity.ok("<h1>Thanh Toán Thất Bại!</h1><p>Xin lỗi, đã có lỗi xảy ra trong quá trình thanh toán. Vui lòng thử lại.</p>");
     }
 
-    // Phương thức tạo hoặc lấy Customer
-    private com.stripe.model.Customer createOrRetrieveCustomer(String email) throws StripeException {
-        CustomerEntity existingCustomer = customerRepository.findByEmail(email);
-        if (existingCustomer != null) {
-            return com.stripe.model.Customer.retrieve(existingCustomer.getCustomerId());
-        } else {
-            com.stripe.param.CustomerCreateParams params = com.stripe.param.CustomerCreateParams.builder()
-                    .setEmail(email)
-                    .build();
 
-            com.stripe.model.Customer customer = com.stripe.model.Customer.create(params);
 
-            // Lưu vào DB
-            CustomerEntity customerEntity = new CustomerEntity();
-            customerEntity.setCustomerId(customer.getId());
-            customerEntity.setEmail(email);
-            customerRepository.save(customerEntity);
 
-            return customer;
-        }
-    }
 
-    @PostMapping("/add-payment-method")
-    public Map<String, Object> addPaymentMethod(@RequestBody Map<String, String> request) {
-        Stripe.apiKey = stripeApiKey;
-        Map<String, Object> response = new HashMap<>();
-        try {
-            String paymentMethodId = request.get("paymentMethodId");
-            String email = request.get("email");
 
-            if (paymentMethodId == null || paymentMethodId.isEmpty()) {
-                response.put("error", "Invalid payment method ID.");
-                return response;
-            }
-
-            Customer customer = createOrRetrieveCustomer(email);
-            String customerId = customer.getId();
-
-            // Thêm payment method vào customer
-            PaymentMethodAttachParams attachParams = PaymentMethodAttachParams.builder()
-                    .setCustomer(customerId)
-                    .build();
-
-            PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
-            paymentMethod.attach(attachParams);
-
-            // Cập nhật default payment method cho customer
-            CustomerUpdateParams customerUpdateParams = CustomerUpdateParams.builder()
-                    .setInvoiceSettings(
-                            CustomerUpdateParams.InvoiceSettings.builder()
-                                    .setDefaultPaymentMethod(paymentMethodId)
-                                    .build()
-                    )
-                    .build();
-
-            customer.update(customerUpdateParams);
-id = customerId;
-            response.put("success", true);
-            response.put("customerId", customerId); // Trả về customerId nếu cần
-        } catch (StripeException e) {
-            response.put("error", e.getMessage());
-        } catch (Exception e) {
-            response.put("error", "An unexpected error occurred: " + e.getMessage());
-        }
-        return response;
-    }
-
-    @GetMapping("/get-payment-methods")
-    public ResponseEntity<List<PaymentMethod>> getPaymentMethods() {
-        Stripe.apiKey = stripeApiKey;
-        String customerId = id; // Thay bằng customerId thực tế
-        try {
-            PaymentMethodListParams params = PaymentMethodListParams.builder()
-                    .setCustomer(customerId)
-                    .build();
-
-            PaymentMethodCollection paymentMethods = PaymentMethod.list(params);
-            return ResponseEntity.ok(paymentMethods.getData());
-        } catch (StripeException e) {
-            return ResponseEntity.ok(Collections.emptyList());
-        }
-    }
 
     @PostMapping("/create-payment-intent-2")
     public ResponseEntity<Map<String, Object>> createPaymentIntent(@RequestBody Map<String, Object> request) {
@@ -406,5 +299,132 @@ id = customerId;
     @GetMapping("/pay")
     public String pay() {
         return "pay"; // Chỉ định trang thanh toán
+    }
+
+    // Endpoint để tạo PaymentIntent cho thanh toán lại
+    @PostMapping("/create-payment-intent-for-existing-customer")
+    public ResponseEntity<Map<String, Object>> createPaymentIntentForExistingCustomer(@RequestBody PaymentRequest paymentRequest) {
+        Stripe.apiKey = stripeApiKey;
+        Map<String, Object> response = new HashMap<>();
+
+        try {
+            // Lấy Customer từ DB
+            CustomerEntity existingCustomer = customerRepository.findByEmail(paymentRequest.getEmail());
+            if (existingCustomer == null) {
+                throw new Exception("Customer not found");
+            }
+
+            // Lấy PaymentMethod ID đã lưu
+            String savedPaymentMethodId = existingCustomer.getPaymentMethodId();
+            if (savedPaymentMethodId == null || savedPaymentMethodId.isEmpty()) {
+                throw new Exception("No saved PaymentMethod for this customer");
+            }
+
+            // Tạo Payment Intent với customerId và PaymentMethod đã lưu
+            PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
+                    .setAmount((long) paymentRequest.getAmount())
+                    .setCurrency("usd")
+                    .setCustomer(existingCustomer.getCustomerId())
+                    .addPaymentMethodType("card")
+                    .setPaymentMethod(savedPaymentMethodId)
+                    .setConfirmationMethod(PaymentIntentCreateParams.ConfirmationMethod.AUTOMATIC)
+                    .setConfirm(true)
+                    .build();
+
+            PaymentIntent paymentIntent = PaymentIntent.create(params);
+
+            response.put("clientSecret", paymentIntent.getClientSecret());
+            response.put("customerId", existingCustomer.getCustomerId());
+        } catch (StripeException e) {
+            response.put("error", e.getMessage());
+        } catch (Exception e) {
+            response.put("error", e.getMessage());
+        }
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/add-payment-method")
+    public Map<String, Object> addPaymentMethod(@RequestBody Map<String, String> request) {
+        Stripe.apiKey = stripeApiKey;
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String paymentMethodId = request.get("paymentMethodId");
+            String email = request.get("email");
+
+            if (paymentMethodId == null || paymentMethodId.isEmpty()) {
+                response.put("error", "Invalid payment method ID.");
+                return response;
+            }
+
+            Customer customer = createOrRetrieveCustomer(email, paymentMethodId);
+            String customerId = customer.getId();
+
+            // Thêm payment method vào customer
+            PaymentMethodAttachParams attachParams = PaymentMethodAttachParams.builder()
+                    .setCustomer(customerId)
+                    .build();
+
+            PaymentMethod paymentMethod = PaymentMethod.retrieve(paymentMethodId);
+            paymentMethod.attach(attachParams);
+
+            // Cập nhật default payment method cho customer
+            CustomerUpdateParams customerUpdateParams = CustomerUpdateParams.builder()
+                    .setInvoiceSettings(
+                            CustomerUpdateParams.InvoiceSettings.builder()
+                                    .setDefaultPaymentMethod(paymentMethodId)
+                                    .build()
+                    )
+                    .build();
+
+            customer.update(customerUpdateParams);
+            id = customerId;
+            response.put("success", true);
+            response.put("customerId", customerId); // Trả về customerId nếu cần
+        } catch (StripeException e) {
+            response.put("error", e.getMessage());
+        } catch (Exception e) {
+            response.put("error", "An unexpected error occurred: " + e.getMessage());
+        }
+        return response;
+    }
+
+    @GetMapping("/get-payment-methods")
+    public ResponseEntity<List<PaymentMethod>> getPaymentMethods() {
+        Stripe.apiKey = stripeApiKey;
+        String customerId = id; // Thay bằng customerId thực tế
+        try {
+            PaymentMethodListParams params = PaymentMethodListParams.builder()
+                    .setCustomer(customerId)
+                    .build();
+
+            PaymentMethodCollection paymentMethods = PaymentMethod.list(params);
+            return ResponseEntity.ok(paymentMethods.getData());
+        } catch (StripeException e) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+    }
+
+    // Phương thức tạo hoặc lấy Customer
+    private com.stripe.model.Customer createOrRetrieveCustomer(String email, String paymentMethodId) throws StripeException {
+        CustomerEntity existingCustomer = customerRepository.findByEmail(email);
+        if (existingCustomer != null) {
+            return com.stripe.model.Customer.retrieve(existingCustomer.getCustomerId());
+        } else {
+            com.stripe.param.CustomerCreateParams params = com.stripe.param.CustomerCreateParams.builder()
+                    .setEmail(email)
+                    .build();
+
+            com.stripe.model.Customer customer = com.stripe.model.Customer.create(params);
+
+            // Lưu vào DB
+            CustomerEntity customerEntity = new CustomerEntity();
+            customerEntity.setCustomerId(customer.getId());
+            customerEntity.setPaymentMethodId(paymentMethodId);
+            customerEntity.setEmail(email);
+            customerRepository.save(customerEntity);
+
+            return customer;
+        }
     }
 }
