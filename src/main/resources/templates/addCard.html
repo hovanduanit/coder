@@ -39,7 +39,7 @@
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ paymentMethodId: paymentMethod.id, email: "king@gmail.com" })
+                body: JSON.stringify({ paymentMethodId: paymentMethod.id})
             });
 
             const result = await response.json();

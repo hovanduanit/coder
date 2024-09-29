@@ -11,7 +11,7 @@
 <h1>Pay with Card</h1>
 <form id="payment-form">
     <select id="payment-method-select"></select>
-    <input type="number" id="amount" placeholder="Enter amount (in cents)" required />
+
     <button type="submit" id="payment">Pay</button>
     <div id="payment-errors" role="alert"></div>
 </form>
@@ -36,33 +36,15 @@
     const retryButton = document.getElementById('payment');
     // Sự kiện cho button thanh toán lại
     retryButton.addEventListener('click', async () => {
-        const amount = parseInt(document.getElementById('amount').value) * 100; // Stripe tính bằng cents
         const paymentMethodId = document.getElementById('payment-method-select').value;
 
         try {
-            const response = await fetch('/payment/create-payment-intent-for-existing-customer', {
+            const response = await fetch('/payment/delete-payment-methods', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ amount: amount, paymentMethodId: paymentMethodId})
-            });
-
-            const data = await response.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            const clientSecret = data.clientSecret;
-
-            if (!clientSecret) {
-                throw new Error('Không nhận được client secret từ server');
-            }
-
-            // Xác nhận thanh toán với PaymentMethod đã lưu
-            const result = await stripe.confirmCardPayment(clientSecret, {
-                payment_method: paymentMethodId, // Thay bằng PaymentMethod ID thực tế đã lưu
+                body: JSON.stringify({paymentMethodId: paymentMethodId})
             });
 
 
