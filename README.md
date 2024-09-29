@@ -9,3 +9,6 @@ Visa
 
 Mastercard
 5555 5555 5555 4444
+
+stripe login
+stripe listen --forward-to localhost:8080/payment/webhook
